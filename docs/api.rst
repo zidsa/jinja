@@ -82,7 +82,9 @@ useful if you want to dig deeper into Jinja or :ref:`develop extensions
 .. autoclass:: Environment([options])
     :members: from_string, get_template, select_template,
               get_or_select_template, join_path, extend, compile_expression,
-              compile_templates, list_templates, add_extension
+              compile_templates, list_templates, add_extension,
+              get_template_async, select_template_async, get_or_select_template_async,
+              list_templates_async, compile_templates_async
 
     .. attribute:: shared
 
@@ -174,6 +176,9 @@ useful if you want to dig deeper into Jinja or :ref:`develop extensions
         was accessed) it should be passed to the undefined object, even if
         a custom `hint` is provided.  This gives undefined objects the
         possibility to enhance the error message.
+
+.. autoclass:: AsyncEnvironment([options])
+    :members: get_template, select_template, get_or_select_template, list_templates
 
 .. autoclass:: Template
     :members: module, make_module
@@ -438,7 +443,7 @@ All loaders are subclasses of :class:`BaseLoader`.  If you want to create your
 own loader, subclass :class:`BaseLoader` and override `get_source`.
 
 .. autoclass:: jinja2.BaseLoader
-    :members: get_source, load
+    :members: get_source, load, get_source_async, load_async, list_templates, list_templates_async
 
 Here a list of the builtin loaders Jinja provides:
 
@@ -473,7 +478,8 @@ the application.
 To use a bytecode cache, instantiate it and pass it to the :class:`Environment`.
 
 .. autoclass:: jinja2.BytecodeCache
-    :members: load_bytecode, dump_bytecode, clear
+    :members: load_bytecode, dump_bytecode, load_bytecode_async, dump_bytecode_async,
+              clear, get_bucket, set_bucket, get_bucket_async, set_bucket_async
 
 .. autoclass:: jinja2.bccache.Bucket
     :members: write_bytecode, load_bytecode, bytecode_from_string,
@@ -509,6 +515,84 @@ template designer, this support (when enabled) is entirely transparent,
 templates continue to look exactly the same. However, developers should
 be aware of the implementation as it affects what types of APIs you can
 use.
+
+Async template loading
+~~~~~~~~~~~~~~~~~~~~~~
+
+Jinja can also load templates asynchronously. This is useful when you want to
+fetch template sources from an async backend (database, object store, HTTP
+service, etc.) or when your bytecode cache is async.
+
+There are two ways to use the async loading API:
+
+-   Call the explicit async methods on :class:`Environment`:
+
+    .. code-block:: python
+
+        template = await env.get_template_async("index.html")
+        templates = await env.list_templates_async()
+
+-   Use :class:`~jinja2.AsyncEnvironment`, which enables async template execution
+    and exposes the async loading methods under the familiar names:
+
+    .. code-block:: python
+
+        env = AsyncEnvironment(loader=..., bytecode_cache=...)
+        template = await env.get_template("index.html")
+        rendered = await template.render_async(...)
+
+Async loader hooks
+~~~~~~~~~~~~~~~~~~
+
+To implement an async loader, override :meth:`~BaseLoader.get_source_async`
+and (optionally) :meth:`~BaseLoader.list_templates_async`. The default async
+implementations call the sync methods, so existing loaders continue to work.
+
+For example, a loader that fetches templates from an async backend::
+
+    from jinja2 import BaseLoader, TemplateNotFound
+
+    class MyAsyncLoader(BaseLoader):
+        async def get_source_async(self, environment, template):
+            row = await my_backend.get(template)
+
+            if row is None:
+                raise TemplateNotFound(template)
+
+            source = row["source"]
+            return source, None, lambda: True
+
+When using :class:`Environment`, you can either call
+:meth:`~Environment.get_template_async` explicitly, or use
+:class:`~jinja2.AsyncEnvironment` and call :meth:`~Environment.get_template`.
+
+Async bytecode cache hooks
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+To implement an async bytecode cache, override
+:meth:`~jinja2.BytecodeCache.load_bytecode_async` and
+:meth:`~jinja2.BytecodeCache.dump_bytecode_async`. The async loading APIs will
+await these hooks when loading and caching compiled templates.
+
+For example, an in-memory async cache::
+
+    from jinja2 import BytecodeCache
+
+    class MyAsyncCache(BytecodeCache):
+        def __init__(self):
+            self._cache = {}
+
+        async def load_bytecode_async(self, bucket):
+            data = self._cache.get(bucket.key)
+
+            if data is not None:
+                bucket.bytecode_from_string(data)
+
+        async def dump_bytecode_async(self, bucket):
+            self._cache[bucket.key] = bucket.bytecode_to_string()
+
+Note that :class:`FileSystemBytecodeCache` and :class:`MemcachedBytecodeCache`
+are sync; they can still be used with the async loading APIs.
 
 By default, async support is disabled. Enabling it will cause the
 environment to compile different code behind the scenes in order to

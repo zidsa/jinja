@@ -920,7 +920,7 @@ class Environment:
         syntax errors to abort the compilation you can set `ignore_errors`
         to `False` and you will get an exception on syntax errors.
 
-        .. versionadded:: TBD
+        .. versionadded:: 3.2
         """
         from .loaders import ModuleLoader
 
@@ -1032,7 +1032,7 @@ class Environment:
 
         If the loader does not support that, a :exc:`TypeError` is raised.
 
-        .. versionadded:: TBD
+        .. versionadded:: 3.2
         """
         assert self.loader is not None, "No loader configured."
         names = await self.loader.list_templates_async()
@@ -1180,7 +1180,7 @@ class Environment:
             template. If the template has already been loaded and
             cached, its globals are updated with any new items.
 
-        .. versionadded:: TBD
+        .. versionadded:: 3.2
         """
         if isinstance(name, Template):
             return name
@@ -1263,7 +1263,7 @@ class Environment:
             template. If the template has already been loaded and
             cached, its globals are updated with any new items.
 
-        .. versionadded:: TBD
+        .. versionadded:: 3.2
         """
         if isinstance(names, Undefined):
             names._fail_with_undefined_error()
@@ -1312,7 +1312,7 @@ class Environment:
         """Use :meth:`select_template_async` if an iterable of template names
         is given, or :meth:`get_template_async` if one name is given.
 
-        .. versionadded:: TBD
+        .. versionadded:: 3.2
         """
         if isinstance(template_name_or_list, (str, Undefined)):
             return await self.get_template_async(template_name_or_list, parent, globals)

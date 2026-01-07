@@ -198,7 +198,11 @@ class BytecodeCache:
         """Asynchronously return a cache bucket for the given template.  All arguments are
         mandatory but filename may be `None`.
         """
-        return self.get_bucket(environment, name, filename, source)
+        key = self.get_cache_key(name, filename)
+        checksum = self.get_source_checksum(source)
+        bucket = Bucket(environment, key, checksum)
+        await self.load_bytecode_async(bucket)
+        return bucket
 
     def set_bucket(self, bucket: Bucket) -> None:
         """Put the bucket into the cache."""
@@ -206,7 +210,7 @@ class BytecodeCache:
 
     async def set_bucket_async(self, bucket: Bucket) -> None:
         """Asynchronously put the bucket into the cache."""
-        self.set_bucket(bucket)
+        await self.dump_bytecode_async(bucket)
 
 
 class FileSystemBytecodeCache(BytecodeCache):

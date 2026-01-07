@@ -214,6 +214,25 @@ class TestModuleLoader:
         self.mod_env = Environment(loader=loaders.ModuleLoader(self.archive))
         return "".join(log)
 
+    def compile_down_async(self, prefix_loader, run_async_fn, zip="deflated"):
+        log = []
+        self.reg_env = Environment(loader=prefix_loader)
+
+        if zip is not None:
+            fd, self.archive = tempfile.mkstemp(suffix=".zip")
+            os.close(fd)
+        else:
+            self.archive = tempfile.mkdtemp()
+
+        async def compile() -> None:
+            await self.reg_env.compile_templates_async(
+                self.archive, zip=zip, log_function=log.append
+            )
+
+        run_async_fn(compile)
+        self.mod_env = Environment(loader=loaders.ModuleLoader(self.archive))
+        return "".join(log)
+
     def teardown_method(self):
         if self.archive is not None:
             if os.path.isfile(self.archive):
@@ -246,6 +265,10 @@ class TestModuleLoader:
 
     def test_deflated_zip_compile(self, prefix_loader):
         self.compile_down(prefix_loader, zip="deflated")
+        self._test_common()
+
+    def test_deflated_zip_compile_async(self, prefix_loader, run_async_fn):
+        self.compile_down_async(prefix_loader, run_async_fn, zip="deflated")
         self._test_common()
 
     def test_stored_zip_compile(self, prefix_loader):

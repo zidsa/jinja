@@ -1,7 +1,9 @@
 import pytest
 
+from jinja2 import DictLoader
 from jinja2 import Environment
 from jinja2.bccache import Bucket
+from jinja2.bccache import BytecodeCache
 from jinja2.bccache import FileSystemBytecodeCache
 from jinja2.bccache import MemcachedBytecodeCache
 from jinja2.exceptions import TemplateNotFound
@@ -18,6 +20,51 @@ class TestByteCodeCache:
         tmpl = env.get_template("test.html")
         assert tmpl.render().strip() == "BAR"
         pytest.raises(TemplateNotFound, env.get_template, "missing.html")
+
+    def test_async_hooks_are_used(self, run_async_fn):
+        class AsyncOnlyBytecodeCache(BytecodeCache):
+            def __init__(self) -> None:
+                self.loaded = 0
+                self.dumped = 0
+                self._store: dict[str, bytes] = {}
+
+            def load_bytecode(self, bucket: Bucket) -> None:  # pragma: no cover
+                raise AssertionError("sync load_bytecode should not be called")
+
+            def dump_bytecode(self, bucket: Bucket) -> None:  # pragma: no cover
+                raise AssertionError("sync dump_bytecode should not be called")
+
+            async def load_bytecode_async(self, bucket: Bucket) -> None:
+                self.loaded += 1
+                data = self._store.get(bucket.key)
+
+                if data is not None:
+                    bucket.bytecode_from_string(data)
+
+            async def dump_bytecode_async(self, bucket: Bucket) -> None:
+                self.dumped += 1
+                self._store[bucket.key] = bucket.bytecode_to_string()
+
+        cache = AsyncOnlyBytecodeCache()
+        env = Environment(
+            loader=DictLoader({"a.html": "{{ 42 }}"}),
+            bytecode_cache=cache,
+            # Disable the template cache so we exercise bytecode cache more than once.
+            cache_size=0,
+        )
+
+        async def load() -> str:
+            tmpl = await env.get_template_async("a.html")
+            return tmpl.render()
+
+        assert run_async_fn(load) == "42"
+        assert cache.loaded == 1
+        assert cache.dumped == 1
+
+        # Second load should come from bytecode cache, so it should not dump again.
+        assert run_async_fn(load) == "42"
+        assert cache.loaded == 2
+        assert cache.dumped == 1
 
 
 class MockMemcached:
