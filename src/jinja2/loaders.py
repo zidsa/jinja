@@ -12,6 +12,7 @@ import zipimport
 from collections import abc
 from hashlib import sha1
 from importlib import import_module
+from inspect import iscoroutinefunction
 from types import ModuleType
 
 from .exceptions import TemplateNotFound
@@ -98,11 +99,39 @@ class BaseLoader:
             )
         raise TemplateNotFound(template)
 
+    async def get_source_async(
+        self, environment: "Environment", template: str
+    ) -> tuple[str, str | None, t.Callable[[], bool] | None]:
+        """Asynchronously get the template source, filename and reload helper for a template.
+        It's passed the environment and template name and has to return a
+        tuple in the form ``(source, filename, uptodate)`` or raise a
+        `TemplateNotFound` error if it can't locate the template.
+
+        The source part of the returned tuple must be the source of the
+        template as a string. The filename should be the name of the
+        file on the filesystem if it was loaded from there, otherwise
+        ``None``. The filename is used by Python for the tracebacks
+        if no loader extension is used.
+
+        The last item in the tuple is the `uptodate` function.  If auto
+        reloading is enabled it's always called to check if the template
+        changed.  No arguments are passed so the function must store the
+        old state somewhere (for example in a closure).  If it returns `False`
+        the template will be reloaded.
+        """
+        return self.get_source(environment, template)
+
     def list_templates(self) -> list[str]:
         """Iterates over all templates.  If the loader does not support that
         it should raise a :exc:`TypeError` which is the default behavior.
         """
         raise TypeError("this loader cannot iterate over all templates")
+
+    async def list_templates_async(self) -> list[str]:
+        """Asynchronously iterates over all templates.  If the loader does not support that
+        it should raise a :exc:`TypeError` which is the default behavior.
+        """
+        return self.list_templates()
 
     @internalcode
     def load(
@@ -143,6 +172,50 @@ class BaseLoader:
         if bcc is not None and bucket.code is None:
             bucket.code = code
             bcc.set_bucket(bucket)
+
+        return environment.template_class.from_code(
+            environment, code, globals, uptodate
+        )
+
+    @internalcode
+    async def load_async(
+        self,
+        environment: "Environment",
+        name: str,
+        globals: t.MutableMapping[str, t.Any] | None = None,
+    ) -> "Template":
+        """Asynchronously loads a template.  This method looks up the template in the cache
+        or loads one by calling :meth:`get_source_async`.  Subclasses should not
+        override this method as loaders working on collections of other
+        loaders (such as :class:`PrefixLoader` or :class:`ChoiceLoader`)
+        will not call this method but `get_source_async` directly.
+        """
+        code = None
+        if globals is None:
+            globals = {}
+
+        # first we try to get the source for this template together
+        # with the filename and the uptodate function.
+        source, filename, uptodate = await self.get_source_async(environment, name)
+
+        # try to load the code from the bytecode cache if there is a
+        # bytecode cache configured.
+        bcc = environment.bytecode_cache
+        if bcc is not None:
+            bucket = await bcc.get_bucket_async(environment, name, filename, source)
+            code = bucket.code
+
+        # if we don't have code so far (not cached, no longer up to
+        # date) etc. we compile the template
+        if code is None:
+            code = environment.compile(source, name, filename)
+
+        # if the bytecode cache is available and the bucket doesn't
+        # have a code so far, we give the bucket the new code and put
+        # it back to the bytecode cache.
+        if bcc is not None and bucket.code is None:
+            bucket.code = code
+            await bcc.set_bucket_async(bucket)
 
         return environment.template_class.from_code(
             environment, code, globals, uptodate
@@ -475,15 +548,37 @@ class FunctionLoader(BaseLoader):
         self,
         load_func: t.Callable[
             [str],
-            str | tuple[str, str | None, t.Callable[[], bool] | None] | None,
+            str
+            | tuple[str, str | None, t.Callable[[], bool] | None]
+            | None
+            | t.Awaitable[
+                str | tuple[str, str | None, t.Callable[[], bool] | None] | None
+            ],
         ],
     ) -> None:
         self.load_func = load_func
+        self.is_async = iscoroutinefunction(self.load_func)
 
     def get_source(
         self, environment: "Environment", template: str
     ) -> tuple[str, str | None, t.Callable[[], bool] | None]:
         rv = self.load_func(template)
+
+        if rv is None:
+            raise TemplateNotFound(template)
+
+        if isinstance(rv, str):
+            return rv, None, None
+
+        return rv
+
+    async def get_source_async(
+        self, environment: "Environment", template: str
+    ) -> tuple[str, str | None, t.Callable[[], bool] | None]:
+        if self.is_async:
+            rv = await self.load_func(template)
+        else:
+            rv = self.load_func(template)
 
         if rv is None:
             raise TemplateNotFound(template)
@@ -534,6 +629,15 @@ class PrefixLoader(BaseLoader):
             # (the one that includes the prefix)
             raise TemplateNotFound(template) from e
 
+    async def get_source_async(
+        self, environment: "Environment", template: str
+    ) -> tuple[str, str | None, t.Callable[[], bool] | None]:
+        loader, name = self.get_loader(template)
+        try:
+            return await loader.get_source_async(environment, name)
+        except TemplateNotFound as e:
+            raise TemplateNotFound(template) from e
+
     @internalcode
     def load(
         self,
@@ -549,10 +653,30 @@ class PrefixLoader(BaseLoader):
             # (the one that includes the prefix)
             raise TemplateNotFound(name) from e
 
+    @internalcode
+    async def load_async(
+        self,
+        environment: "Environment",
+        name: str,
+        globals: t.MutableMapping[str, t.Any] | None = None,
+    ) -> "Template":
+        loader, local_name = self.get_loader(name)
+        try:
+            return await loader.load_async(environment, local_name, globals)
+        except TemplateNotFound as e:
+            raise TemplateNotFound(name) from e
+
     def list_templates(self) -> list[str]:
         result = []
         for prefix, loader in self.mapping.items():
             for template in loader.list_templates():
+                result.append(prefix + self.delimiter + template)
+        return result
+
+    async def list_templates_async(self) -> list[str]:
+        result = []
+        for prefix, loader in self.mapping.items():
+            for template in await loader.list_templates_async():
                 result.append(prefix + self.delimiter + template)
         return result
 
@@ -584,6 +708,16 @@ class ChoiceLoader(BaseLoader):
                 pass
         raise TemplateNotFound(template)
 
+    async def get_source_async(
+        self, environment: "Environment", template: str
+    ) -> tuple[str, str | None, t.Callable[[], bool] | None]:
+        for loader in self.loaders:
+            try:
+                return await loader.get_source_async(environment, template)
+            except TemplateNotFound:
+                pass
+        raise TemplateNotFound(template)
+
     @internalcode
     def load(
         self,
@@ -598,10 +732,30 @@ class ChoiceLoader(BaseLoader):
                 pass
         raise TemplateNotFound(name)
 
+    @internalcode
+    async def load_async(
+        self,
+        environment: "Environment",
+        name: str,
+        globals: t.MutableMapping[str, t.Any] | None = None,
+    ) -> "Template":
+        for loader in self.loaders:
+            try:
+                return await loader.load_async(environment, name, globals)
+            except TemplateNotFound:
+                pass
+        raise TemplateNotFound(name)
+
     def list_templates(self) -> list[str]:
         found = set()
         for loader in self.loaders:
             found.update(loader.list_templates())
+        return sorted(found)
+
+    async def list_templates_async(self) -> list[str]:
+        found = set()
+        for loader in self.loaders:
+            found.update(await loader.list_templates_async())
         return sorted(found)
 
 

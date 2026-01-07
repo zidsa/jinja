@@ -134,12 +134,28 @@ class BytecodeCache:
         """
         raise NotImplementedError()
 
+    async def load_bytecode_async(self, bucket: Bucket) -> None:
+        """Subclasses have to override this method to load bytecode into a
+        bucket asynchronously.  If they are not able to find code in the cache for the
+        bucket, it must not do anything.
+        Unless overridden; this copies the behaviour of load_bytecode.
+        """
+        return self.load_bytecode(bucket)
+
     def dump_bytecode(self, bucket: Bucket) -> None:
         """Subclasses have to override this method to write the bytecode
         from a bucket back to the cache.  If it unable to do so it must not
         fail silently but raise an exception.
         """
         raise NotImplementedError()
+
+    async def dump_bytecode_async(self, bucket: Bucket) -> None:
+        """Subclasses have to override this method to write the bytecode
+        from a bucket back to the cache asynchronously.  If it is unable to do so it must not
+        fail silently but raise an exception.
+        Unless overridden; this copies the behaviour of dump_bytecode.
+        """
+        return self.dump_bytecode(bucket)
 
     def clear(self) -> None:
         """Clears the cache.  This method is not used by Jinja but should be
@@ -176,9 +192,21 @@ class BytecodeCache:
         self.load_bytecode(bucket)
         return bucket
 
+    async def get_bucket_async(
+        self, environment: "Environment", name: str, filename: str | None, source: str
+    ) -> Bucket:
+        """Asynchronously return a cache bucket for the given template.  All arguments are
+        mandatory but filename may be `None`.
+        """
+        return self.get_bucket(environment, name, filename, source)
+
     def set_bucket(self, bucket: Bucket) -> None:
         """Put the bucket into the cache."""
         self.dump_bytecode(bucket)
+
+    async def set_bucket_async(self, bucket: Bucket) -> None:
+        """Asynchronously put the bucket into the cache."""
+        self.set_bucket(bucket)
 
 
 class FileSystemBytecodeCache(BytecodeCache):

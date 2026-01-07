@@ -14,6 +14,7 @@ from string import Formatter
 from markupsafe import EscapeFormatter
 from markupsafe import Markup
 
+from .environment import AsyncEnvironment
 from .environment import Environment
 from .exceptions import SecurityError
 from .runtime import Context
@@ -397,6 +398,10 @@ class SandboxedEnvironment(Environment):
         if not __self.is_safe_callable(__obj):
             raise SecurityError(f"{__obj!r} is not safely callable")
         return __context.call(__obj, *args, **kwargs)
+
+
+class AsyncSandboxedEnvironment(AsyncEnvironment, SandboxedEnvironment):
+    pass
 
 
 class ImmutableSandboxedEnvironment(SandboxedEnvironment):
