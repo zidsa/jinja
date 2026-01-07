@@ -1367,14 +1367,18 @@ class Environment:
 class AsyncEnvironment(Environment):
     code_generator_class: type["CodeGenerator"] = AsyncCodeGenerator
 
-    get_template = Environment.get_template_async
-    select_template = Environment.select_template_async
-    get_or_select_template = Environment.get_or_select_template_async
-    list_templates = Environment.list_templates_async
+    # Runtime aliases for async template loading. These intentionally change the
+    # call contract compared to Environment (they return awaitables). Keep the
+    # behavior, but ignore typing since mypy cannot express this override.
+    get_template = Environment.get_template_async  # type: ignore[assignment]
+    select_template = Environment.select_template_async  # type: ignore[assignment]
+    get_or_select_template = Environment.get_or_select_template_async  # type: ignore[assignment]
+    list_templates = Environment.list_templates_async  # type: ignore[assignment]
 
-    def __init__(self, *args, **kwargs) -> None:
+    def __init__(self, *args: t.Any, **kwargs: t.Any) -> None:
         kwargs.pop("enable_async", None)
-        super().__init__(*args, **kwargs, enable_async=True)
+        kwargs["enable_async"] = True
+        super().__init__(*args, **kwargs)
 
 
 class Template:
