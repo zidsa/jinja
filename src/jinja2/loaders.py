@@ -12,7 +12,6 @@ import zipimport
 from collections import abc
 from hashlib import sha1
 from importlib import import_module
-from inspect import iscoroutinefunction
 from types import ModuleType
 
 from .exceptions import TemplateNotFound
@@ -102,7 +101,8 @@ class BaseLoader:
     async def get_source_async(
         self, environment: "Environment", template: str
     ) -> tuple[str, str | None, t.Callable[[], bool] | None]:
-        """Asynchronously get the template source, filename and reload helper for a template.
+        """Asynchronously get the template source, filename and reload helper
+        for a template.
         It's passed the environment and template name and has to return a
         tuple in the form ``(source, filename, uptodate)`` or raise a
         `TemplateNotFound` error if it can't locate the template.
@@ -128,8 +128,9 @@ class BaseLoader:
         raise TypeError("this loader cannot iterate over all templates")
 
     async def list_templates_async(self) -> list[str]:
-        """Asynchronously iterates over all templates.  If the loader does not support that
-        it should raise a :exc:`TypeError` which is the default behavior.
+        """Asynchronously iterates over all templates.  If the loader does
+        not support that it should raise a :exc:`TypeError` which is the
+        default behavior.
         """
         return self.list_templates()
 
@@ -184,11 +185,12 @@ class BaseLoader:
         name: str,
         globals: t.MutableMapping[str, t.Any] | None = None,
     ) -> "Template":
-        """Asynchronously loads a template.  This method looks up the template in the cache
-        or loads one by calling :meth:`get_source_async`.  Subclasses should not
-        override this method as loaders working on collections of other
-        loaders (such as :class:`PrefixLoader` or :class:`ChoiceLoader`)
-        will not call this method but `get_source_async` directly.
+        """Asynchronously loads a template.  This method looks up the template
+        in the cache or loads one by calling :meth:`get_source_async`.
+        Subclasses should not override this method as loaders working on
+        collections of other loaders (such as :class:`PrefixLoader` or
+        :class:`ChoiceLoader`) will not call this method but
+        `get_source_async` directly.
         """
         code = None
         if globals is None:
@@ -548,37 +550,15 @@ class FunctionLoader(BaseLoader):
         self,
         load_func: t.Callable[
             [str],
-            str
-            | tuple[str, str | None, t.Callable[[], bool] | None]
-            | None
-            | t.Awaitable[
-                str | tuple[str, str | None, t.Callable[[], bool] | None] | None
-            ],
+            str | tuple[str, str | None, t.Callable[[], bool] | None] | None,
         ],
     ) -> None:
         self.load_func = load_func
-        self.is_async = iscoroutinefunction(self.load_func)
 
     def get_source(
         self, environment: "Environment", template: str
     ) -> tuple[str, str | None, t.Callable[[], bool] | None]:
         rv = self.load_func(template)
-
-        if rv is None:
-            raise TemplateNotFound(template)
-
-        if isinstance(rv, str):
-            return rv, None, None
-
-        return rv
-
-    async def get_source_async(
-        self, environment: "Environment", template: str
-    ) -> tuple[str, str | None, t.Callable[[], bool] | None]:
-        if self.is_async:
-            rv = await self.load_func(template)
-        else:
-            rv = self.load_func(template)
 
         if rv is None:
             raise TemplateNotFound(template)

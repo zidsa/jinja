@@ -162,9 +162,7 @@ def test_environment_sync_async_api_parity_static():
         ("compile_templates", "compile_templates_async"),
     ]
 
-    attr_rename_map = {
-        async_name: sync_name for sync_name, async_name in pairs
-    } | {
+    attr_rename_map = {async_name: sync_name for sync_name, async_name in pairs} | {
         # Loader parity used inside the Environment methods.
         "get_source_async": "get_source",
         "list_templates_async": "list_templates",
@@ -177,6 +175,6 @@ def test_environment_sync_async_api_parity_static():
 
         assert inspect.signature(sync_func) == inspect.signature(async_func)
 
-        assert _normalized_body_dump(sync_func, attr_rename_map) == _normalized_body_dump(
-            async_func, attr_rename_map
-        )
+        assert _normalized_body_dump(
+            sync_func, attr_rename_map
+        ) == _normalized_body_dump(async_func, attr_rename_map)

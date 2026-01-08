@@ -136,8 +136,8 @@ class BytecodeCache:
 
     async def load_bytecode_async(self, bucket: Bucket) -> None:
         """Subclasses have to override this method to load bytecode into a
-        bucket asynchronously.  If they are not able to find code in the cache for the
-        bucket, it must not do anything.
+        bucket asynchronously.  If they are not able to find code in the
+        cache for the bucket, it must not do anything.
         Unless overridden; this copies the behaviour of load_bytecode.
         """
         return self.load_bytecode(bucket)
@@ -151,8 +151,8 @@ class BytecodeCache:
 
     async def dump_bytecode_async(self, bucket: Bucket) -> None:
         """Subclasses have to override this method to write the bytecode
-        from a bucket back to the cache asynchronously.  If it is unable to do so it must not
-        fail silently but raise an exception.
+        from a bucket back to the cache asynchronously.  If it is unable to
+        do so it must not fail silently but raise an exception.
         Unless overridden; this copies the behaviour of dump_bytecode.
         """
         return self.dump_bytecode(bucket)
@@ -193,10 +193,14 @@ class BytecodeCache:
         return bucket
 
     async def get_bucket_async(
-        self, environment: "Environment", name: str, filename: str | None, source: str
+        self,
+        environment: "Environment",
+        name: str,
+        filename: str | None,
+        source: str,
     ) -> Bucket:
-        """Asynchronously return a cache bucket for the given template.  All arguments are
-        mandatory but filename may be `None`.
+        """Asynchronously return a cache bucket for the given template.  All
+        arguments are mandatory but filename may be `None`.
         """
         key = self.get_cache_key(name, filename)
         checksum = self.get_source_checksum(source)

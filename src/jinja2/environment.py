@@ -1019,8 +1019,8 @@ class Environment:
         extensions: t.Collection[str] | None = None,
         filter_func: t.Callable[[str], bool] | None = None,
     ) -> list[str]:
-        """Asynchronously returns a list of templates for this environment.  This requires
-        that the loader supports the loader's
+        """Asynchronously returns a list of templates for this environment.
+        This requires that the loader supports the loader's
         :meth:`~BaseLoader.list_templates_async` method.
 
         If there are other files in the template folder besides the
@@ -1250,9 +1250,9 @@ class Environment:
         parent: str | None = None,
         globals: t.MutableMapping[str, t.Any] | None = None,
     ) -> "Template":
-        """Like :meth:`get_template_async`, but asynchronously tries loading multiple names.
-        If none of the names can be loaded a :exc:`TemplatesNotFound`
-        exception is raised.
+        """Like :meth:`get_template_async`, but asynchronously tries loading
+        multiple names. If none of the names can be loaded a
+        :exc:`TemplatesNotFound` exception is raised.
 
         :param names: List of template names to try loading in order.
         :param parent: The name of the parent template importing this
