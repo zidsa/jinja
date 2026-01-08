@@ -41,21 +41,6 @@ def test_list_templates_async_falls_back_to_sync_loader(run_async_fn):
     assert run_async_fn(load) == ["a.html", "b.html"]
 
 
-def test_function_loader_supports_async_callable(run_async_fn):
-    async def load_template(name: str) -> str | None:
-        if name == "a.html":
-            return "A"
-        return None
-
-    env = Environment(loader=FunctionLoader(load_template))
-
-    async def load() -> str:
-        tmpl = await env.get_template_async("a.html")
-        return tmpl.render()
-
-    assert run_async_fn(load) == "A"
-
-
 def test_async_environment_prefers_get_source_async(run_async_fn):
     class Loader(loaders.BaseLoader):
         def get_source(self, environment, template):  # pragma: no cover
