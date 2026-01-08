@@ -1,3 +1,7 @@
+import ast
+import inspect
+import textwrap
+
 from jinja2 import AsyncEnvironment
 from jinja2 import DictLoader
 from jinja2 import Environment
@@ -89,3 +93,90 @@ def test_async_environment_list_templates_uses_async_loader(run_async_fn):
         return await env.list_templates()
 
     assert run_async_fn(load) == ["a.html", "b.html"]
+
+
+def _get_func_def(func):
+    source = textwrap.dedent(inspect.getsource(func))
+    mod = ast.parse(source)
+    node = mod.body[0]
+    assert isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+    return node
+
+
+def _strip_docstring(body):
+    if not body:
+        return body
+
+    first = body[0]
+
+    if (
+        isinstance(first, ast.Expr)
+        and isinstance(first.value, ast.Constant)
+        and isinstance(first.value.value, str)
+    ):
+        return body[1:]
+
+    return body
+
+
+class _NormalizeAsyncBody(ast.NodeTransformer):
+    def __init__(self, attr_rename_map):
+        super().__init__()
+        self._attr_rename_map = attr_rename_map
+
+    def visit_Await(self, node):  # noqa: N802
+        # Await is the main structural difference between sync and async bodies.
+        return self.visit(node.value)
+
+    def visit_Attribute(self, node):  # noqa: N802
+        node = self.generic_visit(node)
+
+        if node.attr in self._attr_rename_map:
+            node.attr = self._attr_rename_map[node.attr]
+
+        return node
+
+
+def _normalized_body_dump(func, attr_rename_map):
+    node = _get_func_def(func)
+    body = _strip_docstring(node.body)
+
+    mod = ast.Module(body=body, type_ignores=[])
+    mod = _NormalizeAsyncBody(attr_rename_map).visit(mod)
+    ast.fix_missing_locations(mod)
+
+    return ast.dump(mod, include_attributes=False)
+
+
+def test_environment_sync_async_api_parity_static():
+    # These async endpoints should be a direct parity layer over the sync ones:
+    # - same signature
+    # - equivalent implementation after stripping docstrings, erasing "await",
+    #   and mapping "*_async" attribute calls to their sync counterpart.
+    pairs = [
+        ("_load_template", "_load_template_async"),
+        ("get_template", "get_template_async"),
+        ("select_template", "select_template_async"),
+        ("get_or_select_template", "get_or_select_template_async"),
+        ("list_templates", "list_templates_async"),
+        ("compile_templates", "compile_templates_async"),
+    ]
+
+    attr_rename_map = {
+        async_name: sync_name for sync_name, async_name in pairs
+    } | {
+        # Loader parity used inside the Environment methods.
+        "get_source_async": "get_source",
+        "list_templates_async": "list_templates",
+        "load_async": "load",
+    }
+
+    for sync_name, async_name in pairs:
+        sync_func = getattr(Environment, sync_name)
+        async_func = getattr(Environment, async_name)
+
+        assert inspect.signature(sync_func) == inspect.signature(async_func)
+
+        assert _normalized_body_dump(sync_func, attr_rename_map) == _normalized_body_dump(
+            async_func, attr_rename_map
+        )
