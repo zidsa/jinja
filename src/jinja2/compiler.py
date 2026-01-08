@@ -604,7 +604,9 @@ class CodeGenerator(NodeVisitor):
     def choose_async(self, async_value: str = "async ", sync_value: str = "") -> str:
         return async_value if self.environment.is_async else sync_value
 
-    def choose_async_env(self, async_value: str = "await ", sync_value: str = "") -> str:
+    def choose_async_env(
+        self, async_value: str = "await ", sync_value: str = ""
+    ) -> str:
         return sync_value
 
     def func(self, name: str) -> str:
@@ -1019,7 +1021,10 @@ class CodeGenerator(NodeVisitor):
             else:
                 self.outdent()
 
-        self.writeline(f"parent_template = {self.choose_async_env()}environment.get_template(", node)
+        self.writeline(
+            f"parent_template = {self.choose_async_env()}environment.get_template(",
+            node,
+        )
         self.visit(node.template, frame)
         self.write(f", {self.name!r})")
         self.writeline("for name, parent_block in parent_template.blocks.items():")
@@ -1051,7 +1056,9 @@ class CodeGenerator(NodeVisitor):
         elif isinstance(node.template, (nodes.Tuple, nodes.List)):
             func_name = "select_template"
 
-        self.writeline(f"template = {self.choose_async_env()}environment.{func_name}(", node)
+        self.writeline(
+            f"template = {self.choose_async_env()}environment.{func_name}(", node
+        )
         self.visit(node.template, frame)
         self.write(f", {self.name!r})")
         if node.ignore_missing:
@@ -1999,5 +2006,7 @@ class AsyncCodeGenerator(CodeGenerator):
     def choose_async(self, async_value: str = "async ", sync_value: str = "") -> str:
         return async_value  # AsyncEnvironment is always async
 
-    def choose_async_env(self, async_value: str = "await ", sync_value: str = "") -> str:
+    def choose_async_env(
+        self, async_value: str = "await ", sync_value: str = ""
+    ) -> str:
         return async_value

@@ -1,11 +1,9 @@
-import pytest
-
 from jinja2 import AsyncEnvironment
 from jinja2 import DictLoader
 from jinja2 import Environment
 from jinja2 import FunctionLoader
-from jinja2 import TemplateNotFound
 from jinja2 import loaders
+from jinja2 import TemplateNotFound
 
 
 def test_get_template_async_works_with_sync_loader(run_async_fn):
@@ -91,4 +89,3 @@ def test_async_environment_list_templates_uses_async_loader(run_async_fn):
         return await env.list_templates()
 
     assert run_async_fn(load) == ["a.html", "b.html"]
-
